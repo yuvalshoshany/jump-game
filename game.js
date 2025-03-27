@@ -4,6 +4,7 @@ const CANVAS_HEIGHT = 400;
 const PLAYER_SIZE = 30;
 const GRAVITY = 0.5;
 const JUMP_FORCE = -12;
+const PLATFORM_JUMP_FORCE = -15.6; // 30% higher than normal jump
 const OBSTACLE_WIDTH = 30;
 const OBSTACLE_HEIGHT = 60;
 const GAME_SPEED = 5;
@@ -11,6 +12,8 @@ const OBSTACLE_SPACING = 300;
 const ROTATION_SPEED = 0.2; // Speed of rotation in radians per frame
 const PLATFORM_WIDTH = 100; // Width of blue platforms
 const PLATFORM_CHANCE = 0.3; // 30% chance for a platform instead of an obstacle
+const MIN_SPACING = 250; // Minimum space between obstacles
+const MAX_SPACING = 450; // Maximum space between obstacles
 
 // Game state
 let canvas, ctx;
@@ -54,9 +57,22 @@ function handleInput(event) {
     if (event.type === 'keydown' && event.code !== 'Space') return;
     
     if (!player.isJumping && !isGameOver) {
-        player.velocityY = JUMP_FORCE;
+        // Check if player is on a platform
+        let isOnPlatform = false;
+        for (const obstacle of obstacles) {
+            if (obstacle.isPlatform &&
+                player.x < obstacle.x + obstacle.width &&
+                player.x + PLAYER_SIZE > obstacle.x &&
+                player.y + PLAYER_SIZE > obstacle.y &&
+                player.y + PLAYER_SIZE < obstacle.y + obstacle.height + 10) {
+                isOnPlatform = true;
+                break;
+            }
+        }
+        
+        player.velocityY = isOnPlatform ? PLATFORM_JUMP_FORCE : JUMP_FORCE;
         player.isJumping = true;
-        player.rotation = 0; // Reset rotation when jumping
+        player.rotation = 0;
         playJumpSound();
     }
 }
@@ -69,6 +85,7 @@ function generateObstacles() {
     while (x < CANVAS_WIDTH * 3) {
         const height = Math.random() * (OBSTACLE_HEIGHT - 30) + 30;
         const isPlatform = Math.random() < PLATFORM_CHANCE;
+        const spacing = Math.random() * (MAX_SPACING - MIN_SPACING) + MIN_SPACING;
         
         obstacles.push({
             x: x,
@@ -77,7 +94,7 @@ function generateObstacles() {
             height: height,
             isPlatform: isPlatform
         });
-        x += OBSTACLE_SPACING + Math.random() * 100;
+        x += spacing;
     }
 }
 
@@ -99,7 +116,7 @@ function update() {
         player.y = CANVAS_HEIGHT - PLAYER_SIZE - 10;
         player.velocityY = 0;
         player.isJumping = false;
-        player.rotation = 0; // Reset rotation when landing
+        player.rotation = 0;
     }
     
     // Platform collision
@@ -132,8 +149,10 @@ function update() {
         const lastObstacle = obstacles[obstacles.length - 1];
         const height = Math.random() * (OBSTACLE_HEIGHT - 30) + 30;
         const isPlatform = Math.random() < PLATFORM_CHANCE;
+        const spacing = Math.random() * (MAX_SPACING - MIN_SPACING) + MIN_SPACING;
+        
         obstacles.push({
-            x: lastObstacle.x + OBSTACLE_SPACING + Math.random() * 100,
+            x: lastObstacle.x + spacing,
             y: CANVAS_HEIGHT - height - 10,
             width: isPlatform ? PLATFORM_WIDTH : OBSTACLE_WIDTH,
             height: height,
@@ -146,11 +165,6 @@ function update() {
     
     // Check collisions
     checkCollisions();
-    
-    // Increase difficulty
-    if (score % 1000 === 0) {
-        gameSpeed += 0.5;
-    }
 }
 
 // Check for collisions
