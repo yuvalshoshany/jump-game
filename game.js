@@ -5,6 +5,7 @@ const PLAYER_SIZE = 30;
 const GRAVITY = 0.63;
 const JUMP_FORCE = -12;
 const PLATFORM_JUMP_FORCE = -15.6; // 30% higher than normal jump
+const DOUBLE_JUMP_FORCE = -10; // Slightly weaker than first jump
 const OBSTACLE_WIDTH = 30;
 const OBSTACLE_HEIGHT = 60;
 const GAME_SPEED = 8;
@@ -33,6 +34,7 @@ let player = {
     y: CANVAS_HEIGHT - PLAYER_SIZE - 10,
     velocityY: 0,
     isJumping: false,
+    canDoubleJump: false, // Add double jump state
     rotation: 0 // Add rotation property
 };
 let obstacles = [];
@@ -131,7 +133,10 @@ function updateGround() {
 function handleInput(event) {
     if (event.type === 'keydown' && event.code !== 'Space') return;
     
-    if (!player.isJumping && !isGameOver) {
+    if (isGameOver) return;
+    
+    // Regular jump (from ground or platform)
+    if (!player.isJumping) {
         // Check if player is on a platform
         let isOnPlatform = false;
         for (const obstacle of obstacles) {
@@ -147,8 +152,16 @@ function handleInput(event) {
         
         player.velocityY = isOnPlatform ? PLATFORM_JUMP_FORCE : JUMP_FORCE;
         player.isJumping = true;
+        player.canDoubleJump = true; // Enable double jump after first jump
         player.rotation = 0;
         playJumpSound();
+    }
+    // Double jump (when already in the air from first jump)
+    else if (player.canDoubleJump) {
+        player.velocityY = DOUBLE_JUMP_FORCE;
+        player.canDoubleJump = false; // Disable double jump until landing again
+        player.rotation = 0;
+        playJumpSound(550); // Higher pitch for double jump
     }
 }
 
@@ -252,6 +265,7 @@ function update() {
             player.y = segment.y - PLAYER_SIZE;
             player.velocityY = 0;
             player.isJumping = false;
+            player.canDoubleJump = false; // Reset double jump when landing
             player.rotation = 0;
             isOnGround = true;
             break;
@@ -271,6 +285,7 @@ function update() {
                     player.y = obstacle.y - PLAYER_SIZE;
                     player.velocityY = 0;
                     player.isJumping = false;
+                    player.canDoubleJump = false; // Reset double jump when landing
                     player.rotation = 0;
                     break;
                 }
@@ -469,6 +484,7 @@ function resetGame() {
     player.y = CANVAS_HEIGHT - PLAYER_SIZE - 10;
     player.velocityY = 0;
     player.isJumping = false;
+    player.canDoubleJump = false; // Reset double jump state
     player.rotation = 0;
     obstacles = [];
     flyingCats = []; // Reset cats
@@ -484,7 +500,7 @@ function resetGame() {
 }
 
 // Sound effects
-function playJumpSound() {
+function playJumpSound(frequency = 440) {
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
     
@@ -492,7 +508,7 @@ function playJumpSound() {
     gainNode.connect(audioContext.destination);
     
     oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
+    oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
     gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
     
     oscillator.start();
