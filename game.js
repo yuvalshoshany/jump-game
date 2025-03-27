@@ -343,8 +343,30 @@ function render() {
     ctx.save();
     ctx.translate(player.x + PLAYER_SIZE/2, player.y + PLAYER_SIZE/2);
     ctx.rotate(player.rotation);
-    ctx.fillStyle = '#4CAF50';
-    ctx.fillRect(-PLAYER_SIZE/2, -PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
+    
+    // Draw the long stick in the middle (bigger)
+    ctx.fillStyle = '#8B4513'; // Brown color
+    const stickWidth = PLAYER_SIZE / 3;  // Thicker stick
+    const stickHeight = PLAYER_SIZE * 1.7;  // Even longer stick
+    ctx.fillRect(-stickWidth/2, -stickHeight/2, stickWidth, stickHeight);
+    
+    // Draw the two side circles (closer to stick)
+    const circleRadius = PLAYER_SIZE / 3;
+    const circleOffset = PLAYER_SIZE / 4; // Lower position
+    const horizontalOffset = PLAYER_SIZE / 3; // Closer to the stick
+    
+    // Left circle
+    ctx.beginPath();
+    ctx.arc(-horizontalOffset, circleOffset, circleRadius, 0, Math.PI * 2);
+    ctx.fillStyle = '#8B4513'; // Brown color
+    ctx.fill();
+    
+    // Right circle
+    ctx.beginPath();
+    ctx.arc(horizontalOffset, circleOffset, circleRadius, 0, Math.PI * 2);
+    ctx.fillStyle = '#8B4513'; // Brown color
+    ctx.fill();
+    
     ctx.restore();
     
     // Draw obstacles and platforms
