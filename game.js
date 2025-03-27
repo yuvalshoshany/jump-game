@@ -14,6 +14,14 @@ const PLATFORM_WIDTH = 100; // Width of blue platforms
 const PLATFORM_CHANCE = 0.3; // 30% chance for a platform instead of an obstacle
 const MIN_SPACING = 250; // Minimum space between obstacles
 const MAX_SPACING = 450; // Maximum space between obstacles
+const PLATFORM_MOVE_SPEED = 0.5; // Speed of platform height changes
+const PLATFORM_MOVE_RANGE = 50; // How much platforms can move up/down
+const GROUND_MOVE_SPEED = 0.3;
+const GROUND_MOVE_RANGE = 50; // Reduced range to keep ground visible
+const GROUND_SEGMENT_WIDTH = 100;
+const GROUND_HEIGHT = 10;
+const MIN_GROUND_Y = CANVAS_HEIGHT - GROUND_HEIGHT; // Minimum Y position for ground
+const SPIKE_SPACING = 5; // Reduced space between spikes in a group
 
 // Game state
 let canvas, ctx;
@@ -25,10 +33,13 @@ let player = {
     rotation: 0 // Add rotation property
 };
 let obstacles = [];
+let groundSegments = []; // Array to store ground segments
 let score = 0;
 let gameSpeed = GAME_SPEED;
 let isGameOver = false;
 let animationId;
+let groundOffset = 0; // Global ground offset for consistent movement
+let groundMoveSpeed = GROUND_MOVE_SPEED; // Separate variable for ground movement speed
 
 // Audio context for sound effects
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -47,9 +58,65 @@ function init() {
     canvas.addEventListener('click', handleInput);
     document.getElementById('restartButton').addEventListener('click', resetGame);
     
+    // Initialize ground segments
+    initGroundSegments();
+    
     // Start game
     generateObstacles();
     gameLoop();
+}
+
+// Initialize ground segments
+function initGroundSegments() {
+    groundSegments = [];
+    let x = 0;
+    groundOffset = 0;
+    
+    // Create enough segments to cover the screen and some extra
+    while (x < CANVAS_WIDTH * 2) {
+        groundSegments.push({
+            x: x,
+            y: MIN_GROUND_Y,
+            width: GROUND_SEGMENT_WIDTH,
+            height: GROUND_HEIGHT
+        });
+        x += GROUND_SEGMENT_WIDTH;
+    }
+}
+
+// Update ground segments
+function updateGround() {
+    // Update global ground offset
+    groundOffset += groundMoveSpeed;
+    
+    // Constrain ground movement
+    if (groundOffset > GROUND_MOVE_RANGE) {
+        groundOffset = GROUND_MOVE_RANGE;
+        groundMoveSpeed = -GROUND_MOVE_SPEED;
+    } else if (groundOffset < 0) {
+        groundOffset = 0;
+        groundMoveSpeed = GROUND_MOVE_SPEED;
+    }
+    
+    // Move segments left and update their Y position
+    groundSegments.forEach(segment => {
+        segment.x -= gameSpeed;
+        segment.y = MIN_GROUND_Y - groundOffset;
+    });
+    
+    // Remove off-screen segments
+    groundSegments = groundSegments.filter(segment => segment.x > -GROUND_SEGMENT_WIDTH);
+    
+    // Add new segments at the right
+    const lastSegment = groundSegments[groundSegments.length - 1];
+    if (lastSegment.x < CANVAS_WIDTH) {
+        groundSegments.push({
+            x: lastSegment.x + GROUND_SEGMENT_WIDTH,
+            y: MIN_GROUND_Y - groundOffset,
+            width: GROUND_SEGMENT_WIDTH,
+            height: GROUND_HEIGHT
+        });
+    }
 }
 
 // Handle user input
@@ -83,17 +150,35 @@ function generateObstacles() {
     let x = CANVAS_WIDTH;
     
     while (x < CANVAS_WIDTH * 3) {
-        const height = Math.random() * (OBSTACLE_HEIGHT - 30) + 30;
         const isPlatform = Math.random() < PLATFORM_CHANCE;
         const spacing = Math.random() * (MAX_SPACING - MIN_SPACING) + MIN_SPACING;
         
-        obstacles.push({
-            x: x,
-            y: CANVAS_HEIGHT - height - 10,
-            width: isPlatform ? PLATFORM_WIDTH : OBSTACLE_WIDTH,
-            height: height,
-            isPlatform: isPlatform
-        });
+        if (isPlatform) {
+            const height = Math.random() * (OBSTACLE_HEIGHT - 30) + 30;
+            obstacles.push({
+                x: x,
+                y: MIN_GROUND_Y - height,
+                width: PLATFORM_WIDTH,
+                height: height,
+                isPlatform: true
+            });
+        } else {
+            const numSpikes = Math.floor(Math.random() * 3) + 1; // Random number between 1 and 3
+            const baseHeight = Math.random() * (OBSTACLE_HEIGHT - 20) + 20;
+            const spikeHeights = Array(numSpikes).fill(0).map(() => 
+                baseHeight * (0.5 + Math.random() * 1.0) // Heights between 50% and 150% of base height
+            );
+            obstacles.push({
+                x: x,
+                y: MIN_GROUND_Y - Math.max(...spikeHeights),
+                width: OBSTACLE_WIDTH * numSpikes + SPIKE_SPACING * (numSpikes - 1),
+                height: Math.max(...spikeHeights),
+                isPlatform: false,
+                isSpike: true,
+                numSpikes: numSpikes,
+                spikeHeights: spikeHeights
+            });
+        }
         x += spacing;
     }
 }
@@ -111,35 +196,50 @@ function update() {
         player.rotation += ROTATION_SPEED;
     }
     
-    // Ground collision
-    if (player.y > CANVAS_HEIGHT - PLAYER_SIZE - 10) {
-        player.y = CANVAS_HEIGHT - PLAYER_SIZE - 10;
-        player.velocityY = 0;
-        player.isJumping = false;
-        player.rotation = 0;
-    }
+    // Update ground
+    updateGround();
     
-    // Platform collision
-    for (const obstacle of obstacles) {
-        if (obstacle.isPlatform) {
-            if (player.x < obstacle.x + obstacle.width &&
-                player.x + PLAYER_SIZE > obstacle.x &&
-                player.y + PLAYER_SIZE > obstacle.y &&
-                player.y + PLAYER_SIZE < obstacle.y + obstacle.height + 10 &&
-                player.velocityY > 0) {
-                player.y = obstacle.y - PLAYER_SIZE;
-                player.velocityY = 0;
-                player.isJumping = false;
-                player.rotation = 0;
-                break;
-            }
+    // Update obstacle positions
+    obstacles.forEach(obstacle => {
+        obstacle.x -= gameSpeed;
+        obstacle.y = MIN_GROUND_Y - obstacle.height - groundOffset;
+    });
+    
+    // Ground collision
+    let isOnGround = false;
+    for (const segment of groundSegments) {
+        if (player.x < segment.x + segment.width &&
+            player.x + PLAYER_SIZE > segment.x &&
+            player.y + PLAYER_SIZE > segment.y &&
+            player.y + PLAYER_SIZE < segment.y + segment.height + 10 &&
+            player.velocityY > 0) {
+            player.y = segment.y - PLAYER_SIZE;
+            player.velocityY = 0;
+            player.isJumping = false;
+            player.rotation = 0;
+            isOnGround = true;
+            break;
         }
     }
     
-    // Update obstacles
-    obstacles.forEach(obstacle => {
-        obstacle.x -= gameSpeed;
-    });
+    // Platform collision (only if not on ground)
+    if (!isOnGround) {
+        for (const obstacle of obstacles) {
+            if (obstacle.isPlatform) {
+                if (player.x < obstacle.x + obstacle.width &&
+                    player.x + PLAYER_SIZE > obstacle.x &&
+                    player.y + PLAYER_SIZE > obstacle.y &&
+                    player.y + PLAYER_SIZE < obstacle.y + obstacle.height + 10 &&
+                    player.velocityY > 0) {
+                    player.y = obstacle.y - PLAYER_SIZE;
+                    player.velocityY = 0;
+                    player.isJumping = false;
+                    player.rotation = 0;
+                    break;
+                }
+            }
+        }
+    }
     
     // Remove off-screen obstacles
     obstacles = obstacles.filter(obstacle => obstacle.x > -OBSTACLE_WIDTH);
@@ -147,17 +247,35 @@ function update() {
     // Generate new obstacles
     if (obstacles[obstacles.length - 1].x < CANVAS_WIDTH) {
         const lastObstacle = obstacles[obstacles.length - 1];
-        const height = Math.random() * (OBSTACLE_HEIGHT - 30) + 30;
-        const isPlatform = Math.random() < PLATFORM_CHANCE;
         const spacing = Math.random() * (MAX_SPACING - MIN_SPACING) + MIN_SPACING;
+        const isPlatform = Math.random() < PLATFORM_CHANCE;
         
-        obstacles.push({
-            x: lastObstacle.x + spacing,
-            y: CANVAS_HEIGHT - height - 10,
-            width: isPlatform ? PLATFORM_WIDTH : OBSTACLE_WIDTH,
-            height: height,
-            isPlatform: isPlatform
-        });
+        if (isPlatform) {
+            const height = Math.random() * (OBSTACLE_HEIGHT - 30) + 30;
+            obstacles.push({
+                x: lastObstacle.x + spacing,
+                y: MIN_GROUND_Y - height,
+                width: PLATFORM_WIDTH,
+                height: height,
+                isPlatform: true
+            });
+        } else {
+            const numSpikes = Math.floor(Math.random() * 3) + 1; // Random number between 1 and 3
+            const baseHeight = Math.random() * (OBSTACLE_HEIGHT - 20) + 20;
+            const spikeHeights = Array(numSpikes).fill(0).map(() => 
+                baseHeight * (0.5 + Math.random() * 1.0) // Heights between 50% and 150% of base height
+            );
+            obstacles.push({
+                x: lastObstacle.x + spacing,
+                y: MIN_GROUND_Y - Math.max(...spikeHeights),
+                width: OBSTACLE_WIDTH * numSpikes + SPIKE_SPACING * (numSpikes - 1),
+                height: Math.max(...spikeHeights),
+                isPlatform: false,
+                isSpike: true,
+                numSpikes: numSpikes,
+                spikeHeights: spikeHeights
+            });
+        }
     }
     
     // Update score
@@ -188,9 +306,11 @@ function render() {
     ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    // Draw ground
-    ctx.fillStyle = '#3a3a3a';
-    ctx.fillRect(0, CANVAS_HEIGHT - 10, CANVAS_WIDTH, 10);
+    // Draw ground segments
+    groundSegments.forEach(segment => {
+        ctx.fillStyle = '#3a3a3a';
+        ctx.fillRect(segment.x, segment.y, segment.width, segment.height);
+    });
     
     // Draw player with rotation
     ctx.save();
@@ -202,8 +322,25 @@ function render() {
     
     // Draw obstacles and platforms
     obstacles.forEach(obstacle => {
-        ctx.fillStyle = obstacle.isPlatform ? '#4444ff' : '#ff4444';
-        ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+        if (obstacle.isPlatform) {
+            // Draw platform
+            ctx.fillStyle = '#4444ff';
+            ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+        } else {
+            // Draw spike group
+            ctx.fillStyle = '#ff4444';
+            for (let i = 0; i < obstacle.numSpikes; i++) {
+                const spikeX = obstacle.x + (OBSTACLE_WIDTH + SPIKE_SPACING) * i;
+                const spikeHeight = obstacle.spikeHeights[i];
+                const spikeY = obstacle.y + obstacle.height - spikeHeight;
+                ctx.beginPath();
+                ctx.moveTo(spikeX, spikeY + spikeHeight);
+                ctx.lineTo(spikeX + OBSTACLE_WIDTH, spikeY + spikeHeight);
+                ctx.lineTo(spikeX + OBSTACLE_WIDTH/2, spikeY);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
     });
     
     // Update score display
@@ -231,8 +368,11 @@ function resetGame() {
     player.y = CANVAS_HEIGHT - PLAYER_SIZE - 10;
     player.velocityY = 0;
     player.isJumping = false;
-    player.rotation = 0; // Reset rotation
+    player.rotation = 0;
     obstacles = [];
+    groundOffset = 0;
+    groundMoveSpeed = GROUND_MOVE_SPEED; // Reset ground movement speed
+    initGroundSegments();
     score = 0;
     gameSpeed = GAME_SPEED;
     isGameOver = false;
