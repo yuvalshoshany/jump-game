@@ -2,18 +2,18 @@
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 400;
 const PLAYER_SIZE = 30;
-const GRAVITY = 0.5;
+const GRAVITY = 0.63;
 const JUMP_FORCE = -12;
 const PLATFORM_JUMP_FORCE = -15.6; // 30% higher than normal jump
 const OBSTACLE_WIDTH = 30;
 const OBSTACLE_HEIGHT = 60;
-const GAME_SPEED = 5;
+const GAME_SPEED = 8;
 const OBSTACLE_SPACING = 300;
 const ROTATION_SPEED = 0.2; // Speed of rotation in radians per frame
 const PLATFORM_WIDTH = 100; // Width of blue platforms
 const PLATFORM_CHANCE = 0.3; // 30% chance for a platform instead of an obstacle
-const MIN_SPACING = 250; // Minimum space between obstacles
-const MAX_SPACING = 450; // Maximum space between obstacles
+const MIN_SPACING = 200; // Increased minimum space between obstacles
+const MAX_SPACING = 350; // Increased maximum space between obstacles
 const PLATFORM_MOVE_SPEED = 0.5; // Speed of platform height changes
 const PLATFORM_MOVE_RANGE = 50; // How much platforms can move up/down
 const GROUND_MOVE_SPEED = 0.3;
@@ -166,7 +166,7 @@ function generateObstacles() {
             const numSpikes = Math.floor(Math.random() * 3) + 1; // Random number between 1 and 3
             const baseHeight = Math.random() * (OBSTACLE_HEIGHT - 20) + 20;
             const spikeHeights = Array(numSpikes).fill(0).map(() => 
-                baseHeight * (0.5 + Math.random() * 1.0) // Heights between 50% and 150% of base height
+                baseHeight * (0.5 + Math.random() * 0.4) // Heights between 50% and 90% of base height
             );
             obstacles.push({
                 x: x,
@@ -226,6 +226,7 @@ function update() {
     if (!isOnGround) {
         for (const obstacle of obstacles) {
             if (obstacle.isPlatform) {
+                // Check for top collision
                 if (player.x < obstacle.x + obstacle.width &&
                     player.x + PLAYER_SIZE > obstacle.x &&
                     player.y + PLAYER_SIZE > obstacle.y &&
@@ -235,6 +236,32 @@ function update() {
                     player.velocityY = 0;
                     player.isJumping = false;
                     player.rotation = 0;
+                    break;
+                }
+                
+                // Check for left side collision
+                if (player.x + PLAYER_SIZE > obstacle.x &&
+                    player.x + PLAYER_SIZE < obstacle.x + 10 &&
+                    player.y < obstacle.y + obstacle.height &&
+                    player.y + PLAYER_SIZE > obstacle.y) {
+                    player.x = obstacle.x - PLAYER_SIZE;
+                    player.velocityY = JUMP_FORCE * 0.5; // Bounce with reduced force
+                    player.isJumping = true;
+                    player.rotation = 0;
+                    playJumpSound();
+                    break;
+                }
+                
+                // Check for right side collision
+                if (player.x < obstacle.x + obstacle.width &&
+                    player.x > obstacle.x + obstacle.width - 10 &&
+                    player.y < obstacle.y + obstacle.height &&
+                    player.y + PLAYER_SIZE > obstacle.y) {
+                    player.x = obstacle.x + obstacle.width;
+                    player.velocityY = JUMP_FORCE * 0.5; // Bounce with reduced force
+                    player.isJumping = true;
+                    player.rotation = 0;
+                    playJumpSound();
                     break;
                 }
             }
@@ -263,7 +290,7 @@ function update() {
             const numSpikes = Math.floor(Math.random() * 3) + 1; // Random number between 1 and 3
             const baseHeight = Math.random() * (OBSTACLE_HEIGHT - 20) + 20;
             const spikeHeights = Array(numSpikes).fill(0).map(() => 
-                baseHeight * (0.5 + Math.random() * 1.0) // Heights between 50% and 150% of base height
+                baseHeight * (0.5 + Math.random() * 0.4) // Heights between 50% and 90% of base height
             );
             obstacles.push({
                 x: lastObstacle.x + spacing,
@@ -358,6 +385,7 @@ function gameLoop() {
 function gameOver() {
     isGameOver = true;
     cancelAnimationFrame(animationId);
+    animationId = null;
     document.getElementById('gameOver').classList.remove('hidden');
     document.getElementById('finalScore').textContent = Math.floor(score / 10);
     playCollisionSound();
@@ -365,6 +393,12 @@ function gameOver() {
 
 // Reset game
 function resetGame() {
+    // Cancel any existing animation frame
+    if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+    }
+    
     player.y = CANVAS_HEIGHT - PLAYER_SIZE - 10;
     player.velocityY = 0;
     player.isJumping = false;
@@ -374,7 +408,7 @@ function resetGame() {
     groundMoveSpeed = GROUND_MOVE_SPEED; // Reset ground movement speed
     initGroundSegments();
     score = 0;
-    gameSpeed = GAME_SPEED;
+    gameSpeed = GAME_SPEED; // Reset game speed to initial constant
     isGameOver = false;
     document.getElementById('gameOver').classList.add('hidden');
     generateObstacles();
