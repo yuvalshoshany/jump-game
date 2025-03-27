@@ -22,6 +22,9 @@ const GROUND_SEGMENT_WIDTH = 100;
 const GROUND_HEIGHT = 10;
 const MIN_GROUND_Y = CANVAS_HEIGHT - GROUND_HEIGHT; // Minimum Y position for ground
 const SPIKE_SPACING = 5; // Reduced space between spikes in a group
+const CAT_SIZE = 60;
+const CAT_SPEED = 5;
+const CAT_SPAWN_CHANCE = 0.005; // Chance per frame to spawn a cat
 
 // Game state
 let canvas, ctx;
@@ -40,6 +43,8 @@ let isGameOver = false;
 let animationId;
 let groundOffset = 0; // Global ground offset for consistent movement
 let groundMoveSpeed = GROUND_MOVE_SPEED; // Separate variable for ground movement speed
+let flyingCats = []; // Array to store flying cats
+let catImage = new Image();
 
 // Audio context for sound effects
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -52,6 +57,9 @@ function init() {
     // Set canvas size
     canvas.width = CANVAS_WIDTH;
     canvas.height = CANVAS_HEIGHT;
+    
+    // Load cat image
+    catImage.src = 'cat.jpg';
     
     // Event listeners
     document.addEventListener('keydown', handleInput);
@@ -183,6 +191,31 @@ function generateObstacles() {
     }
 }
 
+// Update cats
+function updateCats() {
+    // Randomly spawn a new cat
+    if (Math.random() < CAT_SPAWN_CHANCE && !isGameOver) {
+        const catY = Math.random() * (CANVAS_HEIGHT / 2 - CAT_SIZE);
+        flyingCats.push({
+            x: CANVAS_WIDTH,
+            y: catY,
+            width: CAT_SIZE,
+            height: CAT_SIZE,
+            speed: CAT_SPEED + Math.random() * 2 - 1, // Slightly randomize speed
+            rotation: Math.random() * 0.1 - 0.05 // Slight rotation for variety
+        });
+    }
+    
+    // Update all cats
+    flyingCats.forEach(cat => {
+        cat.x -= cat.speed;
+        cat.rotation += 0.01;
+    });
+    
+    // Remove off-screen cats
+    flyingCats = flyingCats.filter(cat => cat.x > -CAT_SIZE);
+}
+
 // Update game state
 function update() {
     if (isGameOver) return;
@@ -204,6 +237,9 @@ function update() {
         obstacle.x -= gameSpeed;
         obstacle.y = MIN_GROUND_Y - obstacle.height - groundOffset;
     });
+    
+    // Update flying cats
+    updateCats();
     
     // Ground collision
     let isOnGround = false;
@@ -369,6 +405,15 @@ function render() {
     
     ctx.restore();
     
+    // Draw flying cats
+    flyingCats.forEach(cat => {
+        ctx.save();
+        ctx.translate(cat.x + cat.width/2, cat.y + cat.height/2);
+        ctx.rotate(cat.rotation);
+        ctx.drawImage(catImage, -cat.width/2, -cat.height/2, cat.width, cat.height);
+        ctx.restore();
+    });
+    
     // Draw obstacles and platforms
     obstacles.forEach(obstacle => {
         if (obstacle.isPlatform) {
@@ -426,6 +471,7 @@ function resetGame() {
     player.isJumping = false;
     player.rotation = 0;
     obstacles = [];
+    flyingCats = []; // Reset cats
     groundOffset = 0;
     groundMoveSpeed = GROUND_MOVE_SPEED; // Reset ground movement speed
     initGroundSegments();
